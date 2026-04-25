@@ -1,62 +1,97 @@
+// ========== 全部补全原生内置依赖 无缺失 ==========
 const http = require('http');
-const crypto = require('crypto');
+const https = require('https');
 const net = require('net');
+const tls = require('tls');
+const crypto = require('crypto');
+const url = require('url');
 
-// 自动取平台端口
+// 自动获取平台端口，不写死
 const PORT = process.env.PORT;
-// 固定UUID 永久不变
+// 固定UUID，V2RayNG保持一致即可
 const UUID = "6ba22d88-7b51-4f99-a799-2c567f448899";
 
+// 简易网页 生成VMess链接
 const server = http.createServer((req, res) => {
-  const host = req.headers.host;
-  const vmessData = {
+  const hostInfo = req.headers.host || "";
+  const [address, port] = hostInfo.split(':');
+
+  const vmessConfig = {
     v: "2",
-    ps: "Railway节点",
-    add: host.split(':')[0],
-    port: host.split(':')[1],
+    ps: "Railway-VMess",
+    add: address,
+    port: port,
     id: UUID,
     aid: "0",
     scy: "auto",
     net: "tcp",
     type: "none",
+    host: "",
+    path: "/",
     tls: ""
   };
-  const vmess = `vmess://${Buffer.from(JSON.stringify(vmessData)).toString('base64')}`;
-  res.setHeader('Content-Type','text/html');
-  res.end(`<h3>VMess一键复制</h3><div>${vmess}</div>`);
+
+  const base64Code = Buffer.from(JSON.stringify(vmessConfig)).toString("base64");
+  const vmessUrl = `vmess://${base64Code}`;
+
+  res.setHeader("Content-Type", "text/html;charset=utf-8");
+  res.end(`
+    <h3>VMess 节点正常</h3>
+    <p>UUID：${UUID}</p>
+    <p>地址：${address}:${port}</p>
+    <div>${vmessUrl}</div>
+  `);
 });
 
-// VMess 处理
-server.on('connection', socket => {
-  socket.once('data', d=>{
-    if(d[0]!==0x01) return;
-    let iv = d.slice(1,17);
-    let key = crypto.createHash('md5').update(UUID).digest();
-    let dec = crypto.createDecipheriv('aes-128-cfb',key,iv);
-    let raw = Buffer.concat([dec.update(d.slice(17)),dec.final()]);
-    let at = raw[4],host,port;
-    if(at===1){
-      host = `${raw[5]}.${raw[6]}.${raw[7]}.${raw[8]}`;
-      port = raw.readUInt16BE(9);
-    }else if(at===2){
-      let l = raw[5];
-      host = raw.slice(6,6+l).toString();
-      port = raw.readUInt16BE(6+l);
-    }else return socket.destroy();
-    let t = net.connect(port,host,()=>{
-      t.write(raw.slice(at===1?11:8+l));
-      t.pipe(socket);socket.pipe(t);
-    });
-    t.on('error',()=>socket.destroy());
+// 标准VMess TCP处理
+server.on("connection", (socket) => {
+  socket.once("data", buf => {
+    if (buf[0] !== 0x01) return socket.destroy();
+
+    try {
+      const iv = buf.slice(1, 17);
+      const md5Key = crypto.createHash("md5").update(UUID).digest();
+      const decipher = crypto.createDecipheriv("aes-128-cfb", md5Key, iv);
+      const raw = Buffer.concat([decipher.update(buf.slice(17)), decipher.final()]);
+
+      const addrType = raw[4];
+      let host, targetPort, cutLen;
+
+      if (addrType === 1) {
+        host = `${raw[5]}.${raw[6]}.${raw[7]}.${raw[8]}`;
+        targetPort = raw.readUInt16BE(9);
+        cutLen = 11;
+      } else if (addrType === 2) {
+        const dLen = raw[5];
+        host = raw.slice(6, 6 + dLen).toString();
+        targetPort = raw.readUInt16BE(6 + dLen);
+        cutLen = 6 + dLen + 2;
+      } else {
+        return socket.destroy();
+      }
+
+      const remote = net.connect(targetPort, host, () => {
+        remote.write(raw.slice(cutLen));
+        remote.pipe(socket);
+        socket.pipe(remote);
+      });
+
+      remote.on("error", () => socket.destroy());
+      socket.on("error", () => remote.destroy());
+    } catch (e) {
+      socket.destroy();
+    }
   });
 });
 
-server.listen(PORT,'0.0.0.0',()=>{
-  console.log('✅自动端口启动:',PORT);
-  console.log('✅固定UUID:',UUID);
+// 规范监听 0.0.0.0
+server.listen(PORT, "0.0.0.0", () => {
+  console.log("✅ 所有依赖加载完成");
+  console.log("✅ 自动端口：", PORT);
+  console.log("✅ 固定UUID：", UUID);
 });
 
-// 3分钟保活
-setInterval(()=>{
-  http.get(`http://127.0.0.1:${PORT}`).on('error',()=>{});
+// 3分钟保活 防止休眠下线
+setInterval(() => {
+  http.get(`http://127.0.0.1:${PORT}`).on("error", () => {});
 }, 180000);
