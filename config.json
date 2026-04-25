@@ -1,0 +1,27 @@
+{
+  "inbounds": [
+    {
+      "port": 3000,
+      "listen": "0.0.0.0",
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
+          {
+            "id": "6ba22d88-7b51-4f99-a799-2c567f448899",
+            "level": 0,
+            "alterId": 0
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp"
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "settings": {}
+    }
+  ]
+}
