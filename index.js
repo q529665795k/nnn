@@ -2,14 +2,26 @@ const http = require('http');
 const net = require('net');
 const url = require('url');
 
-// 必须用 Render 分配的端口，不能写死！
 const PORT = process.env.PORT || 3000;
+// 自定义你的用户名和密码
+const AUTH_USER = "long";
+const AUTH_PASS = "123456";
 
 const server = http.createServer((req, res) => {
-    // 1. 专门给 Render 用的健康检测接口
+    // 健康检测接口
     if (req.url === '/ping') {
         res.writeHead(200, { 'Content-Type': 'text/plain' });
         res.end('pong');
+        return;
+    }
+
+    // 基础鉴权
+    const auth = req.headers['proxy-authorization'];
+    if (!auth || !checkAuth(auth)) {
+        res.writeHead(407, {
+            'Proxy-Authenticate': 'Basic realm="Proxy"'
+        });
+        res.end('Proxy Auth Required');
         return;
     }
 
@@ -23,7 +35,7 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // 2. 处理 HTTPS CONNECT 隧道请求
+    // 处理 HTTPS CONNECT 隧道
     if (method === 'CONNECT') {
         const targetPort = parseInt(port, 10) || 443;
         const socket = net.connect(targetPort, hostname, () => {
@@ -36,13 +48,12 @@ const server = http.createServer((req, res) => {
         });
 
         socket.on('error', (err) => {
-            console.error('CONNECT error:', err);
             res.destroy(err);
         });
         return;
     }
 
-    // 3. 处理普通 HTTP 请求转发
+    // 处理普通 HTTP 请求
     const options = {
         hostname,
         port: port || 80,
@@ -57,7 +68,6 @@ const server = http.createServer((req, res) => {
     });
 
     proxyReq.on('error', (err) => {
-        console.error('proxy error:', err);
         res.writeHead(503);
         res.end('Proxy Error');
     });
@@ -65,8 +75,16 @@ const server = http.createServer((req, res) => {
     req.pipe(proxyReq, { end: true });
 });
 
-// 启动服务，监听 Render 分配的端口
+// 鉴权校验函数
+function checkAuth(authHeader) {
+    const [scheme, encoded] = authHeader.split(' ');
+    if (scheme.toLowerCase() !== 'basic') return false;
+    const decoded = Buffer.from(encoded, 'base64').toString();
+    const [user, pass] = decoded.split(':');
+    return user === AUTH_USER && pass === AUTH_PASS;
+}
+
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ 服务已启动，监听端口：${PORT}`);
-    console.log(`✅ 健康检测地址：/ping`);
+    console.log(`✅ 代理鉴权开启，用户名：${AUTH_USER}`);
 });
