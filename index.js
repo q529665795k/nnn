@@ -1,44 +1,72 @@
+const http = require('http');
 const net = require('net');
-const crypto = require('crypto');
+const url = require('url');
 
-const UUID = Buffer.from("6ba22d88-7b51-4f99-a799-2c567f448899".replace(/-/g, ""), "hex");
-const PORT = process.env.PORT || 3000; // 必须用Render分配的端口
+// 必须用 Render 分配的端口，不能写死！
+const PORT = process.env.PORT || 3000;
 
-const server = net.createServer((client) => {
-  let stage = 0;
-  let remote = null;
-  let host, port;
-
-  client.on('data', (data) => {
-    try {
-      if (stage === 0) {
-        if (data[0] !== 0x01) return client.destroy();
-        const iv = data.slice(1, 17);
-        const payload = data.slice(17);
-        const decipher = crypto.createDecipheriv('aes-128-cfb', UUID, iv);
-        decipher.setAutoPadding(false);
-        const decrypted = Buffer.concat([decipher.update(payload), decipher.final()]);
-        host = decrypted.slice(2, 2+decrypted.readUInt16BE(0));
-        stage = 1;
-        client.write(Buffer.from([0x01, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0, 0]));
-        remote = net.createConnection({host, port}, () => {
-          stage = 2;
-        });
-        remote.on('data', (chunk) => { if (stage === 2) client.write(chunk); });
-        remote.on('close', () => client.destroy());
-        remote.on('error', () => client.destroy());
-      } else if (stage === 2 && remote) {
-        remote.write(data);
-      }
-    } catch (e) {
-      client.destroy();
+const server = http.createServer((req, res) => {
+    // 1. 专门给 Render 用的健康检测接口
+    if (req.url === '/ping') {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('pong');
+        return;
     }
-  });
 
-  client.on('close', () => remote && remote.destroy());
-  client.on('error', () => {});
+    const { method, headers, url: reqUrl } = req;
+    const parsedUrl = url.parse(reqUrl);
+    const { hostname, port, path } = parsedUrl;
+
+    if (!hostname) {
+        res.writeHead(400);
+        res.end('Bad Request');
+        return;
+    }
+
+    // 2. 处理 HTTPS CONNECT 隧道请求
+    if (method === 'CONNECT') {
+        const targetPort = parseInt(port, 10) || 443;
+        const socket = net.connect(targetPort, hostname, () => {
+            res.writeHead(200, {
+                'Connection': 'keep-alive',
+                'Proxy-Connection': 'keep-alive'
+            });
+            socket.pipe(res.socket, { end: true });
+            res.socket.pipe(socket, { end: true });
+        });
+
+        socket.on('error', (err) => {
+            console.error('CONNECT error:', err);
+            res.destroy(err);
+        });
+        return;
+    }
+
+    // 3. 处理普通 HTTP 请求转发
+    const options = {
+        hostname,
+        port: port || 80,
+        path,
+        method,
+        headers: { ...headers, host: hostname }
+    };
+
+    const proxyReq = http.request(options, (proxyRes) => {
+        res.writeHead(proxyRes.statusCode, proxyRes.headers);
+        proxyRes.pipe(res, { end: true });
+    });
+
+    proxyReq.on('error', (err) => {
+        console.error('proxy error:', err);
+        res.writeHead(503);
+        res.end('Proxy Error');
+    });
+
+    req.pipe(proxyReq, { end: true });
 });
 
+// 启动服务，监听 Render 分配的端口
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ VMess已启动，监听端口：${PORT}`);
+    console.log(`✅ 服务已启动，监听端口：${PORT}`);
+    console.log(`✅ 健康检测地址：/ping`);
 });
