@@ -1,17 +1,15 @@
 const express = require('express');
-const { SocksServer } = require('socks');
 const https = require('https');
+const socks = require('socksv5');
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DOMAIN = process.env.RAILWAY_PUBLIC_DOMAIN || 'your-domain.up.railway.app';
+const DOMAIN = process.env.RAILWAY_PUBLIC_DOMAIN || 'localhost';
 
-// SOCKS5 代理服务
-const socksServer = new SocksServer({ allowCommand: true, auths: [] });
-socksServer.listen(1080, '0.0.0.0', () => {
-  console.log('SOCKS5 代理已启动，端口 1080');
-});
+console.log("=== 服务启动日志 ===");
+console.log("PORT:", PORT);
+console.log("DOMAIN:", DOMAIN);
 
-// 节点复制页面
+// 网页服务（节点复制页面）
 app.get('/', (req, res) => {
   const node = `socks5://${DOMAIN}:443`;
   res.send(`
@@ -35,16 +33,27 @@ app.get('/', (req, res) => {
 });
 
 // 启动网页服务
-app.listen(PORT, () => {
-  console.log('节点页面运行在端口:', PORT);
-  // 启动自 ping 保活（每3分钟ping一次自己）
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ 网页服务已启动，监听端口 ${PORT}`);
+  // 3分钟自ping保活
   setInterval(() => {
-    if (DOMAIN && DOMAIN !== 'your-domain.up.railway.app') {
+    if (DOMAIN && DOMAIN !== 'localhost') {
       https.get(`https://${DOMAIN}`, (res) => {
-        console.log(`[保活 ping] 状态码: ${res.statusCode}`);
+        console.log(`[保活ping] 状态码: ${res.statusCode}`);
       }).on('error', (err) => {
-        console.error(`[保活 ping] 失败: ${err.message}`);
+        console.error(`[保活ping] 失败: ${err.message}`);
       });
     }
-  }, 3 * 60 * 1000); // 3分钟 = 3 * 60 * 1000 毫秒
+  }, 3 * 60 * 1000);
 });
+
+// 启动 SOCKS5 代理服务（兼容 socksv5）
+const socksServer = socks.createServer((info, accept, deny) => {
+  accept();
+});
+
+socksServer.listen(1080, '0.0.0.0', () => {
+  console.log('✅ SOCKS5 代理已启动，监听端口 1080');
+});
+
+socksServer.useAuth(socks.auth.None());
