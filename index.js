@@ -1,5 +1,6 @@
 const express = require('express');
 const { SocksServer } = require('socks');
+const https = require('https');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DOMAIN = process.env.RAILWAY_PUBLIC_DOMAIN || 'your-domain.up.railway.app';
@@ -36,4 +37,14 @@ app.get('/', (req, res) => {
 // 启动网页服务
 app.listen(PORT, () => {
   console.log('节点页面运行在端口:', PORT);
+  // 启动自 ping 保活（每3分钟ping一次自己）
+  setInterval(() => {
+    if (DOMAIN && DOMAIN !== 'your-domain.up.railway.app') {
+      https.get(`https://${DOMAIN}`, (res) => {
+        console.log(`[保活 ping] 状态码: ${res.statusCode}`);
+      }).on('error', (err) => {
+        console.error(`[保活 ping] 失败: ${err.message}`);
+      });
+    }
+  }, 3 * 60 * 1000); // 3分钟 = 3 * 60 * 1000 毫秒
 });
