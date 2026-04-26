@@ -1,15 +1,11 @@
 {
-  "name": "railway-socks5-proxy",
+  "name": "railway-proxy",
   "version": "1.0.0",
   "main": "index.js",
-  "dependencies": {
-    "express": "^4.19.2",
-    "socksv5": "^0.0.6"
-  },
   "scripts": {
     "start": "node index.js"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=16"
   }
 }
