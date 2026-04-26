@@ -1,35 +1,34 @@
 const express = require('express');
-const socksv5 = require('socksv5');
+const Socks5Server = require('node-socks5-server');
 const app = express();
 
-// 自动获取 Railway 端口，优先环境变量，没有就默认3000
-const PORT = process.env.PORT || 3000;
+// Railway 分配的主端口（给Web服务用）
+const WEB_PORT = process.env.PORT || 3000;
+// 代理端口固定为 1080（不抢主端口）
+const SOCKS_PORT = 1080;
+
 const USER = "long";
 const PWD = "123456";
 
-// Web保活首页，防休眠
+// Web保活页面
 app.get('/', (req, res) => {
-  res.send(`
-    <h2>代理服务正常运行</h2>
-    <p>SOCKS5 账号密码认证</p>
-    <p>用户名：${USER}</p>
-    <p>密码：${PWD}</p>
-  `);
+  res.send(`✅ 服务正常运行 | SOCKS5 代理已就绪`);
 });
 
-// 创建带账号密码的 SOCKS5 代理
-const proxyServer = socksv5.createServer({
+// 启动SOCKS5代理
+const proxyServer = new Socks5Server({
+  port: SOCKS_PORT,
+  host: '0.0.0.0',
   auths: [
-    socksv5.auth.UserPassword(USER, PWD)
+    Socks5Server.auth.UserPassword(USER, PWD)
   ]
 });
 
-// 代理监听全网段 + 自动端口
-proxyServer.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ SOCKS5 代理启动成功`);
-  console.log(`✅ 监听端口: ${PORT}`);
-  console.log(`✅ 认证账号: ${USER} / 密码: ${PWD}`);
+proxyServer.listen(() => {
+  console.log(`✅ SOCKS5代理启动成功，端口: ${SOCKS_PORT}`);
 });
 
-// Web服务同端口运行
-app.listen(PORT, '0.0.0.0');
+// Web服务绑定主端口
+app.listen(WEB_PORT, '0.0.0.0', () => {
+  console.log(`✅ Web保活服务启动成功，端口: ${WEB_PORT}`);
+});
