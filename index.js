@@ -1,28 +1,38 @@
-const socksv5 = require('socksv5');
-
-const PORT = process.env.PORT || 3000;
-const USER = "long";
-const PWD = "123456";
-
-// 创建代理服务器
-const server = socksv5.createServer({
-  auths: [
-    socksv5.auth.UserPassword(USER, PWD)
-  ]
-});
-
-// 让代理服务器同时处理 HTTP 请求（浏览器访问也能返回网页）
-server.on('request', (req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/html' });
-  res.end(`
-    <h1>✅ 服务正常运行</h1>
-    <p>SOCKS5 代理已就绪</p>
-    <p>用户名: ${USER}</p>
-    <p>密码: ${PWD}</p>
-  `);
-});
-
-// 只监听 3000 这一个端口
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ 服务启动成功，端口: ${PORT}`);
-});
+{
+  "v": "2",
+  "ps": "Railway-HTTP-Proxy",
+  "add": "shuttle.proxy.rlwy.net",
+  "port": "29613",
+  "id": "",
+  "aid": 0,
+  "scy": "",
+  "net": "tcp",
+  "type": "http",
+  "host": "",
+  "path": "",
+  "tls": "tls",
+  "sni": "shuttle.proxy.rlwy.net",
+  "alpn": "",
+  "pbk": "",
+  "fp": "",
+  "pb": "",
+  "sid": "",
+  "spx": "",
+  "headers": {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  },
+  "request": {
+    "method": "GET",
+    "path": ["/"]
+  },
+  "response": {
+    "status": "200",
+    "headers": {
+      "Content-Type": "application/octet-stream"
+    }
+  },
+  "auth": {
+    "username": "long",
+    "password": "123456"
+  }
+}
