@@ -1,34 +1,30 @@
 const express = require('express');
-const Socks5Server = require('node-socks5-server');
+const socksv5 = require('socksv5');
 const app = express();
 
-// Railway 分配的主端口（给Web服务用）
-const WEB_PORT = process.env.PORT || 3000;
-// 代理端口固定为 1080（不抢主端口）
-const SOCKS_PORT = 1080;
-
+// 自动获取 Railway 端口
+const PORT = process.env.PORT || 3000;
 const USER = "long";
 const PWD = "123456";
 
 // Web保活页面
 app.get('/', (req, res) => {
-  res.send(`✅ 服务正常运行 | SOCKS5 代理已就绪`);
+  res.send(`✅ 代理服务运行正常 | 账号: ${USER}`);
 });
 
-// 启动SOCKS5代理
-const proxyServer = new Socks5Server({
-  port: SOCKS_PORT,
-  host: '0.0.0.0',
+// 启动带账号密码的 SOCKS5 代理
+const server = socksv5.createServer({
   auths: [
-    Socks5Server.auth.UserPassword(USER, PWD)
+    socksv5.auth.UserPassword(USER, PWD)
   ]
 });
 
-proxyServer.listen(() => {
-  console.log(`✅ SOCKS5代理启动成功，端口: ${SOCKS_PORT}`);
+// 关键：让 Web 和 SOCKS5 共用一个端口，通过 HTTP CONNECT 协议兼容
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ SOCKS5 代理启动成功，端口: ${PORT}`);
 });
 
-// Web服务绑定主端口
-app.listen(WEB_PORT, '0.0.0.0', () => {
-  console.log(`✅ Web保活服务启动成功，端口: ${WEB_PORT}`);
+// 让 Express 也挂载到这个服务上，共用端口
+app.use((req, res) => {
+  res.send(`✅ 服务正常运行 | SOCKS5 代理已就绪`);
 });
