@@ -1,90 +1,35 @@
-const http = require('http');
-const net = require('net');
-const url = require('url');
+const express = require('express');
+const socksv5 = require('socksv5');
+const app = express();
 
+// 自动获取 Railway 端口，优先环境变量，没有就默认3000
 const PORT = process.env.PORT || 3000;
-// 自定义你的用户名和密码
-const AUTH_USER = "long";
-const AUTH_PASS = "123456";
+const USER = "long";
+const PWD = "123456";
 
-const server = http.createServer((req, res) => {
-    // 健康检测接口
-    if (req.url === '/ping') {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end('pong');
-        return;
-    }
-
-    // 基础鉴权
-    const auth = req.headers['proxy-authorization'];
-    if (!auth || !checkAuth(auth)) {
-        res.writeHead(407, {
-            'Proxy-Authenticate': 'Basic realm="Proxy"'
-        });
-        res.end('Proxy Auth Required');
-        return;
-    }
-
-    const { method, headers, url: reqUrl } = req;
-    const parsedUrl = url.parse(reqUrl);
-    const { hostname, port, path } = parsedUrl;
-
-    if (!hostname) {
-        res.writeHead(400);
-        res.end('Bad Request');
-        return;
-    }
-
-    // 处理 HTTPS CONNECT 隧道
-    if (method === 'CONNECT') {
-        const targetPort = parseInt(port, 10) || 443;
-        const socket = net.connect(targetPort, hostname, () => {
-            res.writeHead(200, {
-                'Connection': 'keep-alive',
-                'Proxy-Connection': 'keep-alive'
-            });
-            socket.pipe(res.socket, { end: true });
-            res.socket.pipe(socket, { end: true });
-        });
-
-        socket.on('error', (err) => {
-            res.destroy(err);
-        });
-        return;
-    }
-
-    // 处理普通 HTTP 请求
-    const options = {
-        hostname,
-        port: port || 80,
-        path,
-        method,
-        headers: { ...headers, host: hostname }
-    };
-
-    const proxyReq = http.request(options, (proxyRes) => {
-        res.writeHead(proxyRes.statusCode, proxyRes.headers);
-        proxyRes.pipe(res, { end: true });
-    });
-
-    proxyReq.on('error', (err) => {
-        res.writeHead(503);
-        res.end('Proxy Error');
-    });
-
-    req.pipe(proxyReq, { end: true });
+// Web保活首页，防休眠
+app.get('/', (req, res) => {
+  res.send(`
+    <h2>代理服务正常运行</h2>
+    <p>SOCKS5 账号密码认证</p>
+    <p>用户名：${USER}</p>
+    <p>密码：${PWD}</p>
+  `);
 });
 
-// 鉴权校验函数
-function checkAuth(authHeader) {
-    const [scheme, encoded] = authHeader.split(' ');
-    if (scheme.toLowerCase() !== 'basic') return false;
-    const decoded = Buffer.from(encoded, 'base64').toString();
-    const [user, pass] = decoded.split(':');
-    return user === AUTH_USER && pass === AUTH_PASS;
-}
-
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ 服务已启动，监听端口：${PORT}`);
-    console.log(`✅ 代理鉴权开启，用户名：${AUTH_USER}`);
+// 创建带账号密码的 SOCKS5 代理
+const proxyServer = socksv5.createServer({
+  auths: [
+    socksv5.auth.UserPassword(USER, PWD)
+  ]
 });
+
+// 代理监听全网段 + 自动端口
+proxyServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ SOCKS5 代理启动成功`);
+  console.log(`✅ 监听端口: ${PORT}`);
+  console.log(`✅ 认证账号: ${USER} / 密码: ${PWD}`);
+});
+
+// Web服务同端口运行
+app.listen(PORT, '0.0.0.0');
